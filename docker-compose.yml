@@ -1,0 +1,118 @@
+version: '3.7'
+
+services:
+  microservice-1:
+    build:
+      context: .
+      dockerfile: ./apps/microservice-1/Dockerfile
+      target: development
+    command: npm run start:dev microservice-1
+    env_file:
+      - ./apps/microservice-1/.env
+    depends_on:
+      - rabbitmq
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - '3001:3001'
+    networks:
+      - tekana-net
+  microservice-2:
+    build:
+      context: .
+      dockerfile: ./apps/microservice-2/Dockerfile
+      target: development
+    command: npm run start:dev microservice-2
+    env_file:
+      - ./apps/microservice-2/.env
+    depends_on:
+      - microservice-1
+      - rabbitmq
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    # ports:
+    #   - '3002:3002'
+    networks:
+      - tekana-net
+  microservice-3:
+    build:
+      context: .
+      dockerfile: ./apps/microservice-3/Dockerfile
+      target: development
+    command: npm run start:dev microservice-3
+    env_file:
+      - ./apps/microservice-3/.env
+    depends_on:
+      - rabbitmq
+      - microservice-1
+      - microservice-2
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - '3003:3003'
+    networks:
+      - tekana-net
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./conf.d:/etc/nginx/conf.d
+    depends_on:
+      - microservice-2
+    ports:
+      - 3002:3002
+  rabbitmq:
+    image: rabbitmq
+    ports:
+      - '5672:5672'
+    networks:
+      - tekana-net
+
+  mongodb-primary:
+    image: docker.io/bitnami/mongodb:7.0
+    environment:
+      - MONGODB_ADVERTISED_HOSTNAME=mongodb-primary
+      - MONGODB_REPLICA_SET_MODE=primary
+      - MONGODB_ROOT_PASSWORD=password123
+      - MONGODB_REPLICA_SET_KEY=replicasetkey123
+    volumes:
+      - 'mongodb_master_data:/bitnami/mongodb'
+    ports:
+      - '27017:27017'
+    networks:
+      - tekana-net
+
+  mongodb-secondary:
+    image: docker.io/bitnami/mongodb:7.0
+    depends_on:
+      - mongodb-primary
+    environment:
+      - MONGODB_ADVERTISED_HOSTNAME=mongodb-secondary
+      - MONGODB_REPLICA_SET_MODE=secondary
+      - MONGODB_INITIAL_PRIMARY_HOST=mongodb-primary
+      - MONGODB_INITIAL_PRIMARY_ROOT_PASSWORD=password123
+      - MONGODB_REPLICA_SET_KEY=replicasetkey123
+    networks:
+      - tekana-net
+
+  mongodb-arbiter:
+    image: docker.io/bitnami/mongodb:7.0
+    depends_on:
+      - mongodb-primary
+    environment:
+      - MONGODB_ADVERTISED_HOSTNAME=mongodb-arbiter
+      - MONGODB_REPLICA_SET_MODE=arbiter
+      - MONGODB_INITIAL_PRIMARY_HOST=mongodb-primary
+      - MONGODB_INITIAL_PRIMARY_ROOT_PASSWORD=password123
+      - MONGODB_REPLICA_SET_KEY=replicasetkey123
+    networks:
+      - tekana-net
+
+volumes:
+  mongodb_master_data:
+    driver: local
+
+networks:
+  tekana-net:
